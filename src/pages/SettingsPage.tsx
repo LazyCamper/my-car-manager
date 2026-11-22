@@ -292,6 +292,56 @@ export const SettingsPage: React.FC = () => {
         </div>
       </section>
 
+      <section
+        className="backup-card related-apps-card"
+        aria-labelledby="related-apps-heading"
+      >
+        <div className="backup-card-header">
+          <h2 id="related-apps-heading" className="section-title">
+            다른 앱 바로가기
+          </h2>
+          <p className="backup-card-desc">
+            함께 만든 웹 앱들도 바로 열어볼 수 있어요.
+          </p>
+        </div>
+        <div className="related-apps-list">
+          <a
+            href="https://lazycamper.github.io/my-whisky-collection/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="related-app-link touch-target"
+          >
+            <span className="related-app-icon" aria-hidden="true">
+              🥃
+            </span>
+            <span className="related-app-info">
+              <strong>My Whisky Collection</strong>
+              <span>나만의 위스키 보관함 · 시음 노트</span>
+            </span>
+            <span className="related-app-arrow" aria-hidden="true">
+              ↗
+            </span>
+          </a>
+          <a
+            href="https://lazycamper.github.io/subin-music-code/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="related-app-link touch-target"
+          >
+            <span className="related-app-icon" aria-hidden="true">
+              🎵
+            </span>
+            <span className="related-app-info">
+              <strong>Subin Music Code</strong>
+              <span>음악 · 코드 학습 웹 앱</span>
+            </span>
+            <span className="related-app-arrow" aria-hidden="true">
+              ↗
+            </span>
+          </a>
+        </div>
+      </section>
+
       {isNoticeOpen && (
         <div
           className="modal-backdrop"
