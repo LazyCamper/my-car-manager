@@ -95,7 +95,9 @@ export const HomePage: React.FC = () => {
         }
         const logs = await maintenanceRepo.getByVehicle(v.id);
         const withMileage = logs
-          .filter((l) => typeof l.mileage === 'number')
+          .filter(
+            (l) => l.status !== 'reserved' && typeof l.mileage === 'number',
+          )
           .sort((a, b) => b.date.localeCompare(a.date));
         if (withMileage.length > 0) {
           return [v.id, withMileage[0].date] as const;

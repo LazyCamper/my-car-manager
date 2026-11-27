@@ -558,7 +558,9 @@ export class DexieMaintenanceRepository implements IMaintenanceRepository {
       .equals(vehicleId)
       .toArray();
     return items.filter(
-      (item) => Boolean(item.nextDueDate) && !item.isDueCompleted,
+      (item) =>
+        item.status === 'reserved' ||
+        (Boolean(item.nextDueDate) && !item.isDueCompleted),
     );
   }
 

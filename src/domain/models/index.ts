@@ -72,11 +72,15 @@ export type MaintenanceCategory =
   | 'accident_repair'
   | 'other';
 
+export type MaintenanceStatus = 'completed' | 'reserved';
+
 export interface MaintenanceLog {
   id: string;
   vehicleId: string;
-  date: string; // YYYY.MM.DD
-  mileage?: number; // 주행거리 미기재(사고 수리 등) 허용
+  status?: MaintenanceStatus; // 미지정 시 'completed'로 간주 (기존 데이터·백업 v1 호환)
+  reservationTime?: string; // 예약 시간 (예: '10:30', 선택)
+  date: string; // YYYY.MM.DD (정비 완료일 또는 예약일)
+  mileage?: number; // 주행거리 미기재(사고 수리·예약 등) 허용
   category: MaintenanceCategory;
   categories?: MaintenanceCategory[]; // 복수 카테고리 태그 지원
   title: string;

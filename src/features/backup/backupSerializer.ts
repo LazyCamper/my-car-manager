@@ -151,12 +151,26 @@ export function parseAndValidateBackupJson(jsonText: string): BackupFilePayload 
   }
 
   for (const m of maintenanceLogs) {
+    const rawStatus =
+      typeof m === 'object' && m !== null
+        ? (m as { status?: unknown }).status
+        : undefined;
+    const rawReservationTime =
+      typeof m === 'object' && m !== null
+        ? (m as { reservationTime?: unknown }).reservationTime
+        : undefined;
+
     if (
       typeof m !== 'object' ||
       m === null ||
       typeof (m as { id?: unknown }).id !== 'string' ||
       typeof (m as { vehicleId?: unknown }).vehicleId !== 'string' ||
-      typeof (m as { date?: unknown }).date !== 'string'
+      typeof (m as { date?: unknown }).date !== 'string' ||
+      (rawStatus !== undefined &&
+        rawStatus !== 'completed' &&
+        rawStatus !== 'reserved') ||
+      (rawReservationTime !== undefined &&
+        typeof rawReservationTime !== 'string')
     ) {
       throw new Error('백업 파일의 정비 내역 데이터 형식이 올바르지 않습니다.');
     }

@@ -84,7 +84,9 @@ function createTestRepositories(initial?: {
       getByVehicle: async (vehicleId) => maintenanceLogs[vehicleId] ?? [],
       getUpcomingDueByVehicle: async (vehicleId) =>
         (maintenanceLogs[vehicleId] ?? []).filter(
-          (m) => Boolean(m.nextDueDate) && !m.isDueCompleted,
+          (m) =>
+            m.status === 'reserved' ||
+            (Boolean(m.nextDueDate) && !m.isDueCompleted),
         ),
       save: async (input) => ({
         ...input,

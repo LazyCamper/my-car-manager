@@ -6,7 +6,13 @@ import { RepositoryProvider } from '../app/RepositoryContext';
 import { AppRoutes } from '../app/router';
 import { Attachment, MaintenanceLog, Vehicle } from '../domain/models';
 import { AppRepositories } from '../repositories/interfaces';
+import { formatDateDot } from '../shared/utils';
 import * as imageCompression from '../shared/utils/imageCompression';
+
+function addDays(base: Date, days: number): string {
+  const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + days);
+  return formatDateDot(d);
+}
 
 function createMaintenanceTestRepositories(initial?: {
   vehicles?: Vehicle[];
@@ -22,17 +28,35 @@ function createMaintenanceTestRepositories(initial?: {
     vehicleRepo: {
       getAll: async () => [...vehicles],
       getById: async (id) => vehicles.find((v) => v.id === id),
-      save: async (input) => ({
-        id: input.id ?? 'v-1',
-        name: input.name,
-        plateNumber: input.plateNumber,
-        manufacturerModel: input.manufacturerModel,
-        modelYear: input.modelYear,
-        currentMileage: input.currentMileage,
-        displayOrder: 0,
-        createdAt: '2026-01-01',
-        updatedAt: '2026-01-01',
-      }),
+      save: async (input) => {
+        if (input.id) {
+          const idx = vehicles.findIndex((v) => v.id === input.id);
+          if (idx >= 0) {
+            const updated: Vehicle = {
+              ...vehicles[idx],
+              ...input,
+              id: input.id,
+              updatedAt: '2026-01-01',
+            };
+            vehicles[idx] = updated;
+            return updated;
+          }
+        }
+        const created: Vehicle = {
+          id: input.id ?? 'v-1',
+          name: input.name,
+          plateNumber: input.plateNumber,
+          manufacturerModel: input.manufacturerModel,
+          modelYear: input.modelYear,
+          currentMileage: input.currentMileage,
+          mileageUpdatedAt: input.mileageUpdatedAt,
+          displayOrder: 0,
+          createdAt: '2026-01-01',
+          updatedAt: '2026-01-01',
+        };
+        vehicles.push(created);
+        return created;
+      },
       delete: async () => undefined,
     },
     complianceRepo: {
@@ -52,8 +76,8 @@ function createMaintenanceTestRepositories(initial?: {
         logs.filter(
           (l) =>
             l.vehicleId === vehicleId &&
-            Boolean(l.nextDueDate) &&
-            !l.isDueCompleted,
+            (l.status === 'reserved' ||
+              (Boolean(l.nextDueDate) && !l.isDueCompleted)),
         ),
       save: async (input) => {
         if (input.id) {
@@ -503,5 +527,187 @@ describe('정비 내역 화면 (MaintenancePage) 통합 테스트', () => {
     });
     expect(screen.getByText('2026.03.12')).toBeInTheDocument();
     expect(screen.getByText(/주행거리 미기재/)).toBeInTheDocument();
+  });
+
+  it('정비 예약 등록 시 홈과 정비 탭 양쪽에 D-day가 표시되고 누적 비용·현재 주행거리에서 제외되며, 원클릭 완료 전환 시 모두 반영된다', async () => {
+    const reserveDate = addDays(new Date(), 5); // D-5
+    const repos = createMaintenanceTestRepositories({
+      vehicles: [{ ...DEFAULT_VEHICLE, currentMileage: 35000 }],
+      logs: [
+        {
+          id: 'maint-done-1',
+          vehicleId: 'v-1',
+          date: '2026.10.01',
+          mileage: 34000,
+          category: 'filter',
+          title: '에어컨 필터 교체',
+          cost: 30000,
+          attachmentIds: [],
+          createdAt: '2026-10-01T09:00:00.000Z',
+        },
+      ],
+    });
+
+    render(
+      <RepositoryProvider repositories={repos}>
+        <ActiveVehicleProvider>
+          <MemoryRouter initialEntries={['/maintenance']}>
+            <AppRoutes />
+          </MemoryRouter>
+        </ActiveVehicleProvider>
+      </RepositoryProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('total-maintenance-cost')).toHaveTextContent(
+        '₩30,000',
+      );
+    });
+
+    // 1. 모달을 열고 [정비 예약 등록] 탭으로 전환하여 예약 등록
+    fireEvent.click(screen.getByRole('button', { name: '+ 정비 등록' }));
+    fireEvent.click(screen.getByRole('tab', { name: '정비 예약 등록' }));
+
+    fireEvent.change(screen.getByLabelText(/예약 날짜/), {
+      target: { value: reserveDate },
+    });
+    fireEvent.change(screen.getByLabelText(/예약 시간/), {
+      target: { value: '14:30' },
+    });
+    fireEvent.change(screen.getByLabelText(/정비 항목 상세명/), {
+      target: { value: '미션오일 순환식 교환' },
+    });
+    fireEvent.change(screen.getByLabelText(/예상 비용/), {
+      target: { value: '220000' },
+    });
+    fireEvent.change(screen.getByLabelText(/예약 정비소/), {
+      target: { value: '오토큐 성수점' },
+    });
+    fireEvent.change(screen.getByLabelText(/주행거리/), {
+      target: { value: '40000' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '예약 등록' }));
+
+    // 2. 정비 탭 상단 예약 카드에 D-day(D-5) 표시 및 누적 비용 제외 확인
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('reserved-maintenance-section'),
+      ).toBeInTheDocument();
+    });
+    const reservedSection = screen.getByTestId('reserved-maintenance-section');
+    expect(within(reservedSection).getByText('D-5')).toBeInTheDocument();
+    expect(
+      within(reservedSection).getByText(/14:30/),
+    ).toBeInTheDocument();
+    expect(
+      within(reservedSection).getByText('미션오일 순환식 교환'),
+    ).toBeInTheDocument();
+    // 예약 비용 220,000원은 누적 정비 비용에서 제외되어 여전히 ₩30,000
+    expect(screen.getByTestId('total-maintenance-cost')).toHaveTextContent(
+      '₩30,000',
+    );
+    expect(screen.getByText('예약 1건 제외')).toBeInTheDocument();
+
+    // 3. 홈 화면으로 이동: 현재 주행거리(35,000km) 자동 갱신 제외 + 다가오는 만기 D-day 표시 확인
+    fireEvent.click(screen.getByRole('link', { name: /나의 차고/ }));
+    await waitFor(() => {
+      expect(
+        screen.getByText('미션오일 순환식 교환 예약'),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByText('35,000km')).toBeInTheDocument();
+    expect(screen.getByText('정비 예약')).toBeInTheDocument();
+    expect(screen.getByText('D-5')).toBeInTheDocument();
+    expect(
+      screen.getByText(/14:30 · 오토큐 성수점/),
+    ).toBeInTheDocument();
+
+    // 4. 다시 정비 탭으로 이동 후 예약 카드에서 원클릭 [✓ 완료 전환] 클릭
+    fireEvent.click(screen.getByRole('link', { name: '정비' }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: '✓ 완료 전환' }),
+      ).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: '✓ 완료 전환' }));
+
+    // 예약 섹션이 사라지고 누적 비용(30,000 + 220,000 = 250,000)에 합산됨
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId('reserved-maintenance-section'),
+      ).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId('total-maintenance-cost')).toHaveTextContent(
+      '₩250,000',
+    );
+
+    // 5. 홈 화면으로 이동 시 주행거리가 40,000km로 자동 갱신되고 예약 D-day에서 제거됨
+    fireEvent.click(screen.getByRole('link', { name: /나의 차고/ }));
+    await waitFor(() => {
+      expect(screen.getByText('40,000km')).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText('미션오일 순환식 교환 예약'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('예약 상세 모달 내부의 [✓ 정비 완료로 전환] 원클릭 버튼으로도 완료 전환이 동작한다', async () => {
+    const reserveDate = addDays(new Date(), 3);
+    const repos = createMaintenanceTestRepositories({
+      vehicles: [{ ...DEFAULT_VEHICLE, currentMileage: 35000 }],
+      logs: [
+        {
+          id: 'maint-res-modal',
+          vehicleId: 'v-1',
+          status: 'reserved',
+          reservationTime: '10:00',
+          date: reserveDate,
+          mileage: 36500,
+          category: 'brake',
+          title: '브레이크액 교환',
+          cost: 80000,
+          shopName: '블루핸즈',
+          attachmentIds: [],
+          createdAt: '2026-11-20T09:00:00.000Z',
+        },
+      ],
+    });
+
+    render(
+      <RepositoryProvider repositories={repos}>
+        <ActiveVehicleProvider>
+          <MemoryRouter initialEntries={['/maintenance']}>
+            <AppRoutes />
+          </MemoryRouter>
+        </ActiveVehicleProvider>
+      </RepositoryProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('total-maintenance-cost')).toHaveTextContent(
+        '₩0',
+      );
+    });
+
+    // 예약 카드를 클릭해 상세 모달 열기
+    fireEvent.click(screen.getByText('브레이크액 교환'));
+    expect(
+      screen.getByRole('heading', { name: '정비 예약 상세 · 수정' }),
+    ).toBeInTheDocument();
+
+    // 모달 상단의 원클릭 [✓ 정비 완료로 전환] 클릭
+    fireEvent.click(
+      screen.getByRole('button', { name: '✓ 정비 완료로 전환' }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('total-maintenance-cost')).toHaveTextContent(
+        '₩80,000',
+      );
+    });
+    expect(
+      screen.queryByTestId('reserved-maintenance-section'),
+    ).not.toBeInTheDocument();
   });
 });

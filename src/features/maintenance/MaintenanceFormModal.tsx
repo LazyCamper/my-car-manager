@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useRepositories } from '../../app/RepositoryContext';
-import { MaintenanceCategory, MaintenanceLog } from '../../domain/models';
+import {
+  MaintenanceCategory,
+  MaintenanceLog,
+  MaintenanceStatus,
+} from '../../domain/models';
 import {
   PhotoAttachmentField,
   PhotoDraftItem,
@@ -24,6 +28,7 @@ export interface MaintenanceFormModalProps {
   isOpen: boolean;
   vehicleId: string;
   defaultMileage?: number;
+  initialMode?: MaintenanceStatus;
   initialLog?: MaintenanceLog | null;
   onClose: () => void;
   onSubmit: (data: MaintenanceFormSubmitData) => Promise<void>;
@@ -34,6 +39,7 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
   isOpen,
   vehicleId,
   defaultMileage = 0,
+  initialMode = 'completed',
   initialLog,
   onClose,
   onSubmit,
@@ -42,6 +48,8 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
   const { attachmentRepo } = useRepositories();
   const isEditMode = Boolean(initialLog);
 
+  const [formMode, setFormMode] = useState<MaintenanceStatus>('completed');
+  const [reservationTime, setReservationTime] = useState('');
   const [date, setDate] = useState('');
   const [mileage, setMileage] = useState('');
   const [category, setCategory] = useState<MaintenanceCategory>('engine_oil');
@@ -71,6 +79,10 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
     setIsConfirmingDelete(false);
 
     if (initialLog) {
+      const logMode: MaintenanceStatus =
+        initialLog.status === 'reserved' ? 'reserved' : 'completed';
+      setFormMode(logMode);
+      setReservationTime(initialLog.reservationTime ?? '');
       setDate(initialLog.date);
       setMileage(
         typeof initialLog.mileage === 'number'
@@ -113,8 +125,15 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
         setPhotos([]);
       }
     } else {
+      const startMode: MaintenanceStatus = initialMode ?? 'completed';
+      setFormMode(startMode);
+      setReservationTime('');
       setDate(formatDateDot(new Date()));
-      setMileage(defaultMileage > 0 ? String(defaultMileage) : '');
+      setMileage(
+        startMode === 'completed' && defaultMileage > 0
+          ? String(defaultMileage)
+          : '',
+      );
       setCategory('engine_oil');
       setSelectedCategories(['engine_oil']);
       setHasTouchedCategories(false);
@@ -131,11 +150,28 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
       isMounted = false;
       createdUrls.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [isOpen, initialLog, defaultMileage, attachmentRepo]);
+  }, [isOpen, initialLog, initialMode, defaultMileage, attachmentRepo]);
 
   if (!isOpen) {
     return null;
   }
+
+  const handleSwitchMode = (nextMode: MaintenanceStatus) => {
+    if (nextMode === formMode) return;
+    setErrorMessage(null);
+    if (!isEditMode) {
+      if (nextMode === 'reserved' && mileage === String(defaultMileage)) {
+        setMileage('');
+      } else if (
+        nextMode === 'completed' &&
+        mileage === '' &&
+        defaultMileage > 0
+      ) {
+        setMileage(String(defaultMileage));
+      }
+    }
+    setFormMode(nextMode);
+  };
 
   const handleToggleExtraCategory = (targetCat: MaintenanceCategory) => {
     const option = MAINTENANCE_CATEGORY_OPTIONS.find(
@@ -166,13 +202,16 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitForm = async (targetStatus: MaintenanceStatus) => {
     setErrorMessage(null);
 
     const trimmedDate = date.trim();
     if (!trimmedDate) {
-      setErrorMessage('정비 날짜를 입력해 주세요.');
+      setErrorMessage(
+        targetStatus === 'reserved'
+          ? '예약 날짜를 입력해 주세요.'
+          : '정비 날짜를 입력해 주세요.',
+      );
       return;
     }
 
@@ -214,7 +253,7 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
     }
 
     let formattedNextDueDate: string | undefined;
-    if (nextDueDate.trim()) {
+    if (targetStatus === 'completed' && nextDueDate.trim()) {
       try {
         formattedNextDueDate = formatDateDot(
           parseDateString(nextDueDate.trim()),
@@ -228,7 +267,7 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
     }
 
     let finalNextDueMileage: number | undefined;
-    if (nextDueMileage.trim() !== '') {
+    if (targetStatus === 'completed' && nextDueMileage.trim() !== '') {
       const parsedNextDueMileage = Number(nextDueMileage);
       if (!Number.isFinite(parsedNextDueMileage) || parsedNextDueMileage < 0) {
         setErrorMessage(
@@ -272,6 +311,11 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
       await onSubmit({
         id: initialLog?.id,
         vehicleId,
+        status: targetStatus,
+        reservationTime:
+          targetStatus === 'reserved'
+            ? reservationTime.trim() || undefined
+            : undefined,
         date: formattedDate,
         mileage: finalMileage,
         category: finalCategories[0],
@@ -304,6 +348,11 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitForm(formMode);
   };
 
   const handleConfirmDelete = async () => {
@@ -340,6 +389,20 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
     setNextDueMileage(String(base + delta));
   };
 
+  const modalHeading = isEditMode
+    ? initialLog?.status === 'reserved'
+      ? '정비 예약 상세 · 수정'
+      : '정비 내역 상세 · 수정'
+    : '정비 내역 등록';
+
+  const submitButtonLabel = isEditMode
+    ? initialLog?.status === 'reserved' && formMode === 'completed'
+      ? '정비 완료로 저장'
+      : '수정 저장'
+    : formMode === 'reserved'
+      ? '예약 등록'
+      : '정비 등록';
+
   return (
     <div
       className="modal-backdrop"
@@ -354,7 +417,7 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
       >
         <header className="modal-header">
           <h2 id="maintenance-modal-title" className="modal-title">
-            {isEditMode ? '정비 내역 상세 · 수정' : '정비 내역 등록'}
+            {modalHeading}
           </h2>
           <button
             type="button"
@@ -367,44 +430,125 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
         </header>
 
         <form onSubmit={handleSubmit} className="vehicle-form" noValidate>
+          <div
+            className="maint-mode-tabs"
+            role="tablist"
+            aria-label="정비 등록 유형"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={formMode === 'completed'}
+              className={`maint-mode-tab touch-target${formMode === 'completed' ? ' active' : ''}`}
+              onClick={() => handleSwitchMode('completed')}
+            >
+              정비 완료 기록
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={formMode === 'reserved'}
+              className={`maint-mode-tab touch-target${formMode === 'reserved' ? ' active' : ''}`}
+              onClick={() => handleSwitchMode('reserved')}
+            >
+              정비 예약 등록
+            </button>
+          </div>
+
+          {isEditMode &&
+            initialLog?.status === 'reserved' &&
+            formMode === 'reserved' && (
+              <div
+                className="reservation-convert-banner"
+                data-testid="modal-convert-banner"
+              >
+                <div className="reservation-convert-info">
+                  <strong>정비를 마치셨나요?</strong>
+                  <span>입력된 정보로 즉시 완료 내역에 반영합니다.</span>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-chip-primary touch-target"
+                  onClick={() => void submitForm('completed')}
+                  disabled={isSubmitting}
+                >
+                  ✓ 정비 완료로 전환
+                </button>
+              </div>
+            )}
+
           {errorMessage && (
             <p className="form-error-banner" role="alert">
               {errorMessage}
             </p>
           )}
 
-          <div className="form-row-2col">
-            <div className="form-field">
-              <label htmlFor="maint-date" className="form-label">
-                정비 날짜 <span className="required-mark">*</span>
-              </label>
-              <input
-                id="maint-date"
-                type="text"
-                inputMode="numeric"
-                className="form-input touch-target"
-                placeholder="예: 2026.05.12 또는 26.5.12"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
-              />
-            </div>
+          {formMode === 'reserved' ? (
+            <div className="form-row-2col">
+              <div className="form-field">
+                <label htmlFor="maint-date" className="form-label">
+                  예약 날짜 <span className="required-mark">*</span>
+                </label>
+                <input
+                  id="maint-date"
+                  type="text"
+                  inputMode="numeric"
+                  className="form-input touch-target"
+                  placeholder="예: 2026.12.05 또는 26.12.5"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  required
+                />
+              </div>
 
-            <div className="form-field">
-              <label htmlFor="maint-mileage" className="form-label">
-                주행거리 (km) · 선택
-              </label>
-              <input
-                id="maint-mileage"
-                type="number"
-                inputMode="numeric"
-                className="form-input touch-target"
-                placeholder="미입력 시 생략"
-                value={mileage}
-                onChange={(e) => setMileage(e.target.value)}
-              />
+              <div className="form-field">
+                <label htmlFor="maint-reservation-time" className="form-label">
+                  예약 시간 · 선택
+                </label>
+                <input
+                  id="maint-reservation-time"
+                  type="text"
+                  className="form-input touch-target"
+                  placeholder="예: 10:30, 오후 2시"
+                  value={reservationTime}
+                  onChange={(e) => setReservationTime(e.target.value)}
+                />
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="form-row-2col">
+              <div className="form-field">
+                <label htmlFor="maint-date" className="form-label">
+                  정비 날짜 <span className="required-mark">*</span>
+                </label>
+                <input
+                  id="maint-date"
+                  type="text"
+                  inputMode="numeric"
+                  className="form-input touch-target"
+                  placeholder="예: 2026.05.12 또는 26.5.12"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-field">
+                <label htmlFor="maint-mileage" className="form-label">
+                  주행거리 (km) · 선택
+                </label>
+                <input
+                  id="maint-mileage"
+                  type="number"
+                  inputMode="numeric"
+                  className="form-input touch-target"
+                  placeholder="미입력 시 생략"
+                  value={mileage}
+                  onChange={(e) => setMileage(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="form-field">
             <span className="form-label">
@@ -452,14 +596,20 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
           <div className="form-row-2col">
             <div className="form-field">
               <label htmlFor="maint-cost" className="form-label">
-                비용 (원) · 미입력 시 0원
+                {formMode === 'reserved'
+                  ? '예상 비용 (원) · 미입력 시 0원'
+                  : '비용 (원) · 미입력 시 0원'}
               </label>
               <input
                 id="maint-cost"
                 type="number"
                 inputMode="numeric"
                 className="form-input touch-target"
-                placeholder="보증/보험 수리 시 비워두세요"
+                placeholder={
+                  formMode === 'reserved'
+                    ? '미정 시 비워두세요'
+                    : '보증/보험 수리 시 비워두세요'
+                }
                 value={cost}
                 onChange={(e) => setCost(e.target.value)}
               />
@@ -467,7 +617,7 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
 
             <div className="form-field">
               <label htmlFor="maint-shop" className="form-label">
-                정비소
+                {formMode === 'reserved' ? '예약 정비소' : '정비소'}
               </label>
               <input
                 id="maint-shop"
@@ -480,68 +630,85 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
             </div>
           </div>
 
-          <div className="form-row-2col">
+          {formMode === 'reserved' ? (
             <div className="form-field">
-              <label htmlFor="maint-next-due" className="form-label">
-                다음 정비 예정일 (선택)
+              <label htmlFor="maint-mileage" className="form-label">
+                주행거리 (km) · 선택
               </label>
               <input
-                id="maint-next-due"
-                type="text"
-                inputMode="numeric"
-                className="form-input touch-target"
-                placeholder="예: 2027.03.15"
-                value={nextDueDate}
-                onChange={(e) => setNextDueDate(e.target.value)}
-              />
-              <DateQuickAdjustButtons
-                value={nextDueDate}
-                onChange={setNextDueDate}
-                fieldLabel="다음 정비 예정일"
-              />
-            </div>
-
-            <div className="form-field">
-              <label htmlFor="maint-next-due-mileage" className="form-label">
-                다음 목표 거리 (km) · 선택
-              </label>
-              <input
-                id="maint-next-due-mileage"
+                id="maint-mileage"
                 type="number"
                 inputMode="numeric"
                 className="form-input touch-target"
-                placeholder="예: 26000"
-                value={nextDueMileage}
-                onChange={(e) => setNextDueMileage(e.target.value)}
+                placeholder="예약 시점 예상 주행거리 (미입력 가능 · 현재 주행거리에 미반영)"
+                value={mileage}
+                onChange={(e) => setMileage(e.target.value)}
               />
-              <div className="date-quick-buttons">
-                <button
-                  type="button"
-                  className="date-quick-btn"
-                  onClick={handleSetCurrentDueMileage}
-                  title="현재 주행거리로 설정"
-                >
-                  현재
-                </button>
-                <button
-                  type="button"
-                  className="date-quick-btn"
-                  onClick={() => handleAddDueMileage(1000)}
-                  title="다음 목표 거리 1,000km 추가"
-                >
-                  +1천
-                </button>
-                <button
-                  type="button"
-                  className="date-quick-btn"
-                  onClick={() => handleAddDueMileage(10000)}
-                  title="다음 목표 거리 10,000km 추가"
-                >
-                  +1만
-                </button>
+            </div>
+          ) : (
+            <div className="form-row-2col">
+              <div className="form-field">
+                <label htmlFor="maint-next-due" className="form-label">
+                  다음 정비 예정일 (선택)
+                </label>
+                <input
+                  id="maint-next-due"
+                  type="text"
+                  inputMode="numeric"
+                  className="form-input touch-target"
+                  placeholder="예: 2027.03.15"
+                  value={nextDueDate}
+                  onChange={(e) => setNextDueDate(e.target.value)}
+                />
+                <DateQuickAdjustButtons
+                  value={nextDueDate}
+                  onChange={setNextDueDate}
+                  fieldLabel="다음 정비 예정일"
+                />
+              </div>
+
+              <div className="form-field">
+                <label htmlFor="maint-next-due-mileage" className="form-label">
+                  다음 목표 거리 (km) · 선택
+                </label>
+                <input
+                  id="maint-next-due-mileage"
+                  type="number"
+                  inputMode="numeric"
+                  className="form-input touch-target"
+                  placeholder="예: 26000"
+                  value={nextDueMileage}
+                  onChange={(e) => setNextDueMileage(e.target.value)}
+                />
+                <div className="date-quick-buttons">
+                  <button
+                    type="button"
+                    className="date-quick-btn"
+                    onClick={handleSetCurrentDueMileage}
+                    title="현재 주행거리로 설정"
+                  >
+                    현재
+                  </button>
+                  <button
+                    type="button"
+                    className="date-quick-btn"
+                    onClick={() => handleAddDueMileage(1000)}
+                    title="다음 목표 거리 1,000km 추가"
+                  >
+                    +1천
+                  </button>
+                  <button
+                    type="button"
+                    className="date-quick-btn"
+                    onClick={() => handleAddDueMileage(10000)}
+                    title="다음 목표 거리 10,000km 추가"
+                  >
+                    +1만
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className="form-field">
             <label htmlFor="maint-memo" className="form-label">
@@ -551,7 +718,11 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
               id="maint-memo"
               rows={2}
               className="form-input"
-              placeholder="교체 부품 브랜드, 특이사항 등을 기록하세요"
+              placeholder={
+                formMode === 'reserved'
+                  ? '예약 접수번호, 요청 정비 사항 등을 기록하세요'
+                  : '교체 부품 브랜드, 특이사항 등을 기록하세요'
+              }
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
             />
@@ -612,7 +783,7 @@ export const MaintenanceFormModal: React.FC<MaintenanceFormModalProps> = ({
                 className="btn btn-primary touch-target"
                 disabled={isSubmitting}
               >
-                {isEditMode ? '수정 저장' : '정비 등록'}
+                {submitButtonLabel}
               </button>
             </div>
           )}

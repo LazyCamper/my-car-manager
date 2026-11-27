@@ -57,7 +57,8 @@ export const UpcomingDueSection: React.FC<UpcomingDueSectionProps> = ({
                     </span>
                     <strong className="due-item-title">{item.title}</strong>
                     <span className="due-item-date">
-                      만기일: {item.dueDate}
+                      {item.categoryLabel === '정비 예약' ? '예약일' : '만기일'}:{' '}
+                      {item.dueDate}
                       {item.subInfo ? ` · ${item.subInfo}` : ''}
                     </span>
                   </div>

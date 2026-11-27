@@ -64,6 +64,29 @@ export function buildUpcomingDueItems({
   }
 
   for (const log of maintenanceLogs) {
+    if (log.status === 'reserved') {
+      const dday = calculateDday(log.date, baseDate);
+      const subParts: string[] = [];
+      if (log.reservationTime?.trim()) {
+        subParts.push(log.reservationTime.trim());
+      }
+      if (log.shopName?.trim()) {
+        subParts.push(log.shopName.trim());
+      }
+      items.push({
+        id: `maintenance-reserved-${log.id}`,
+        type: 'maintenance',
+        categoryLabel: '정비 예약',
+        title: log.title.endsWith('예약') ? log.title : `${log.title} 예약`,
+        dueDate: formatDateDot(log.date),
+        daysRemaining: dday.daysRemaining,
+        status: dday.status,
+        badgeText: dday.daysRemaining < 0 ? '일정 지남' : dday.badgeText,
+        subInfo: subParts.length > 0 ? subParts.join(' · ') : undefined,
+      });
+      continue;
+    }
+
     if (!log.nextDueDate || log.isDueCompleted) {
       continue;
     }

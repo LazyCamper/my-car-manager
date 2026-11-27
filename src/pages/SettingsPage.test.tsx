@@ -93,8 +93,8 @@ function createStatefulBackupTestRepos(initial?: {
         maintenanceLogs.filter(
           (m) =>
             m.vehicleId === vehicleId &&
-            Boolean(m.nextDueDate) &&
-            !m.isDueCompleted,
+            (m.status === 'reserved' ||
+              (Boolean(m.nextDueDate) && !m.isDueCompleted)),
         ),
       save: async (input) => ({
         ...input,
@@ -197,6 +197,19 @@ describe('설정 화면 백업 내보내기/가져오기 및 30일 경과 안내
           shopName: '오토큐',
           attachmentIds: ['att-1'],
           createdAt: '2026-10-15T10:00:00.000Z',
+        },
+        {
+          id: 'maint-reserved-1',
+          vehicleId: 'v-1',
+          status: 'reserved' as const,
+          reservationTime: '11:00',
+          date: '2026.12.20',
+          category: 'tire' as const,
+          title: '윈터타이어 교체 예약',
+          cost: 80000,
+          shopName: '타이어프로',
+          attachmentIds: [],
+          createdAt: '2026-11-27T10:00:00.000Z',
         },
       ],
       inspections: [

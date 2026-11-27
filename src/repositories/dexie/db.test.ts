@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { Inspection, Insurance, MaintenanceLog, Vehicle } from '../../domain/models';
 import { AppMetaRecord, CAR_LEDGER_DB_NAME, CarManagerDatabase, defaultDb } from './db';
-import { createInitialSampleVehicle, DexieVehicleRepository } from './index';
+import {
+  createInitialSampleVehicle,
+  DexieMaintenanceRepository,
+  DexieVehicleRepository,
+} from './index';
 
 function createStubDb() {
   const vehicleStore = new Map<string, Vehicle>();
@@ -144,5 +148,53 @@ describe('Dexie 데이터베이스 설정 검증 (db.ts)', () => {
     expect(maintenanceStore.size).toBe(0);
     expect(inspectionStore.size).toBe(0);
     expect(insuranceStore.size).toBe(0);
+  });
+
+  it('DexieMaintenanceRepository.getUpcomingDueByVehicle은 예약(reserved) 건과 미완료 다음 예정일 건을 모두 반환한다', async () => {
+    const { db } = createStubDb();
+    const maintRepo = new DexieMaintenanceRepository(db);
+
+    await db.maintenanceLogs.bulkPut([
+      {
+        id: 'm-reserved',
+        vehicleId: 'v-1',
+        status: 'reserved',
+        reservationTime: '14:00',
+        date: '2026.12.10',
+        category: 'engine_oil',
+        title: '엔진오일 예약',
+        cost: 100000,
+        attachmentIds: [],
+        createdAt: '2026-11-27T00:00:00.000Z',
+      },
+      {
+        id: 'm-due',
+        vehicleId: 'v-1',
+        date: '2026.06.01',
+        category: 'tire',
+        title: '타이어 교체',
+        cost: 400000,
+        nextDueDate: '2027.06.01',
+        isDueCompleted: false,
+        attachmentIds: [],
+        createdAt: '2026-06-01T00:00:00.000Z',
+      },
+      {
+        id: 'm-normal-completed',
+        vehicleId: 'v-1',
+        date: '2026.08.01',
+        category: 'filter',
+        title: '필터 교체',
+        cost: 30000,
+        attachmentIds: [],
+        createdAt: '2026-08-01T00:00:00.000Z',
+      },
+    ]);
+
+    const upcoming = await maintRepo.getUpcomingDueByVehicle('v-1');
+    expect(upcoming.map((item) => item.id).sort()).toEqual([
+      'm-due',
+      'm-reserved',
+    ]);
   });
 });

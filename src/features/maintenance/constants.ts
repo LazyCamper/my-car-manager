@@ -36,6 +36,13 @@ export function getLogCategories(log: MaintenanceLog): MaintenanceCategory[] {
   return [normalizeCategory(log.category)];
 }
 
+export function isReservedMaintenance(log: MaintenanceLog): boolean {
+  return log.status === 'reserved';
+}
+
 export function calculateTotalMaintenanceCost(logs: MaintenanceLog[]): number {
-  return logs.reduce((sum, log) => sum + (Number.isFinite(log.cost) ? log.cost : 0), 0);
+  return logs.reduce((sum, log) => {
+    if (isReservedMaintenance(log)) return sum;
+    return sum + (Number.isFinite(log.cost) ? log.cost : 0);
+  }, 0);
 }

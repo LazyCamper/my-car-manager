@@ -158,4 +158,51 @@ describe('다가오는 만기 통합 정렬 테스트 (buildUpcomingDueItems)', 
     expect(items[2].status).toBe('normal');
     expect(items[2].badgeText).toBe('D-62');
   });
+
+  it('정비 예약(status: reserved) 항목도 예약일 기준 D-day와 예약 시간·정비소 정보를 포함하여 임박순 정렬된다', () => {
+    const baseDate = '2026.11.14';
+    const items = buildUpcomingDueItems({
+      baseDate,
+      maintenanceLogs: [
+        {
+          id: 'res-future',
+          vehicleId: 'v-1',
+          status: 'reserved',
+          reservationTime: '10:30',
+          date: '2026.11.19', // D-5
+          category: 'engine_oil',
+          title: '엔진오일 교체',
+          shopName: '구미서비스센터',
+          cost: 120000,
+          attachmentIds: [],
+          createdAt: '2026-11-14T00:00:00.000Z',
+        },
+        {
+          id: 'res-overdue',
+          vehicleId: 'v-1',
+          status: 'reserved',
+          date: '2026.11.12', // D-(-2)
+          category: 'brake',
+          title: '브레이크 점검 예약',
+          cost: 0,
+          attachmentIds: [],
+          createdAt: '2026-11-10T00:00:00.000Z',
+        },
+      ],
+    });
+
+    expect(items).toHaveLength(2);
+    expect(items[0].id).toBe('maintenance-reserved-res-overdue');
+    expect(items[0].categoryLabel).toBe('정비 예약');
+    expect(items[0].title).toBe('브레이크 점검 예약');
+    expect(items[0].status).toBe('overdue');
+    expect(items[0].badgeText).toBe('일정 지남');
+
+    expect(items[1].id).toBe('maintenance-reserved-res-future');
+    expect(items[1].categoryLabel).toBe('정비 예약');
+    expect(items[1].title).toBe('엔진오일 교체 예약');
+    expect(items[1].status).toBe('urgent');
+    expect(items[1].badgeText).toBe('D-5');
+    expect(items[1].subInfo).toBe('10:30 · 구미서비스센터');
+  });
 });

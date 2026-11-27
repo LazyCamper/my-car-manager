@@ -1,14 +1,16 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useActiveVehicle } from '../app/ActiveVehicleContext';
 import { useRepositories } from '../app/RepositoryContext';
-import { MaintenanceLog } from '../domain/models';
+import { MaintenanceLog, MaintenanceStatus } from '../domain/models';
 import {
   calculateTotalMaintenanceCost,
   CategoryFilterValue,
+  isReservedMaintenance,
   MaintenanceFormModal,
   MaintenanceFormSubmitData,
   MaintenanceTimeline,
+  ReservedMaintenanceSection,
 } from '../features/maintenance';
 import { formatCurrency } from '../shared/utils';
 
@@ -26,17 +28,14 @@ export const MaintenancePage: React.FC = () => {
   const [selectedCategory, setSelectedCategory] =
     useState<CategoryFilterValue>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalInitialMode, setModalInitialMode] =
+    useState<MaintenanceStatus>('completed');
   const [editingLog, setEditingLog] = useState<MaintenanceLog | null>(null);
 
   const loadLogs = useCallback(
     async (vehicleId: string) => {
       const data = await maintenanceRepo.getByVehicle(vehicleId);
-      const sorted = [...data].sort((a, b) => {
-        const dateCmp = b.date.localeCompare(a.date);
-        if (dateCmp !== 0) return dateCmp;
-        return b.createdAt.localeCompare(a.createdAt);
-      });
-      setLogs(sorted);
+      setLogs(data);
     },
     [maintenanceRepo],
   );
@@ -49,15 +48,45 @@ export const MaintenancePage: React.FC = () => {
     void loadLogs(activeVehicle.id);
   }, [activeVehicle, loadLogs]);
 
-  const totalCost = calculateTotalMaintenanceCost(logs);
+  const reservedLogs = useMemo(
+    () =>
+      logs
+        .filter((log) => isReservedMaintenance(log))
+        .sort((a, b) => {
+          const dateCmp = a.date.localeCompare(b.date);
+          if (dateCmp !== 0) return dateCmp;
+          const timeCmp = (a.reservationTime ?? '').localeCompare(
+            b.reservationTime ?? '',
+          );
+          if (timeCmp !== 0) return timeCmp;
+          return a.createdAt.localeCompare(b.createdAt);
+        }),
+    [logs],
+  );
 
-  const handleOpenAddModal = () => {
+  const completedLogs = useMemo(
+    () =>
+      logs
+        .filter((log) => !isReservedMaintenance(log))
+        .sort((a, b) => {
+          const dateCmp = b.date.localeCompare(a.date);
+          if (dateCmp !== 0) return dateCmp;
+          return b.createdAt.localeCompare(a.createdAt);
+        }),
+    [logs],
+  );
+
+  const totalCost = useMemo(() => calculateTotalMaintenanceCost(logs), [logs]);
+
+  const handleOpenAddModal = (mode: MaintenanceStatus = 'completed') => {
     setEditingLog(null);
+    setModalInitialMode(mode);
     setIsModalOpen(true);
   };
 
   const handleSelectLog = (log: MaintenanceLog) => {
     setEditingLog(log);
+    setModalInitialMode(log.status === 'reserved' ? 'reserved' : 'completed');
     setIsModalOpen(true);
   };
 
@@ -65,6 +94,7 @@ export const MaintenancePage: React.FC = () => {
     await maintenanceRepo.save(data);
     if (activeVehicle) {
       if (
+        data.status !== 'reserved' &&
         typeof data.mileage === 'number' &&
         data.mileage > activeVehicle.currentMileage
       ) {
@@ -76,6 +106,16 @@ export const MaintenancePage: React.FC = () => {
       }
       await loadLogs(activeVehicle.id);
     }
+  };
+
+  const handleQuickCompleteLog = async (log: MaintenanceLog) => {
+    const { id, createdAt: _createdAt, ...rest } = log;
+    await handleSaveLog({
+      ...rest,
+      id,
+      status: 'completed',
+      reservationTime: undefined,
+    });
   };
 
   const handleDeleteLog = async (id: string) => {
@@ -144,7 +184,7 @@ export const MaintenancePage: React.FC = () => {
               <button
                 type="button"
                 className="btn btn-primary touch-target"
-                onClick={handleOpenAddModal}
+                onClick={() => handleOpenAddModal('completed')}
               >
                 + 정비 등록
               </button>
@@ -153,7 +193,14 @@ export const MaintenancePage: React.FC = () => {
             <div className="maint-total-cost-row">
               <div className="maint-total-label-group">
                 <span className="maint-total-label">누적 정비 비용</span>
-                <span className="maint-total-count">총 {logs.length}건</span>
+                <span className="maint-total-count">
+                  총 {completedLogs.length}건
+                </span>
+                {reservedLogs.length > 0 && (
+                  <span className="maint-reserved-count">
+                    예약 {reservedLogs.length}건 제외
+                  </span>
+                )}
               </div>
               <strong
                 className="maint-total-amount"
@@ -164,8 +211,15 @@ export const MaintenancePage: React.FC = () => {
             </div>
           </section>
 
+          <ReservedMaintenanceSection
+            reservedLogs={reservedLogs}
+            onSelectLog={handleSelectLog}
+            onQuickComplete={(log) => void handleQuickCompleteLog(log)}
+            onOpenAddReservation={() => handleOpenAddModal('reserved')}
+          />
+
           <MaintenanceTimeline
-            logs={logs}
+            logs={completedLogs}
             selectedCategory={selectedCategory}
             onSelectCategory={setSelectedCategory}
             onSelectLog={handleSelectLog}
@@ -175,6 +229,7 @@ export const MaintenancePage: React.FC = () => {
             isOpen={isModalOpen}
             vehicleId={activeVehicle.id}
             defaultMileage={activeVehicle.currentMileage}
+            initialMode={modalInitialMode}
             initialLog={editingLog}
             onClose={() => setIsModalOpen(false)}
             onSubmit={handleSaveLog}

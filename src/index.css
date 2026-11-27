@@ -1299,6 +1299,158 @@ textarea {
   border-radius: 999px;
 }
 
+.maint-reserved-count {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #6b7684;
+  background-color: #f2f4f6;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+/* 정비 모달 완료/예약 상단 탭 */
+.maint-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 5px;
+  background-color: #f2f4f6;
+  border-radius: 16px;
+}
+
+.maint-mode-tab {
+  border: none;
+  border-radius: 12px;
+  background-color: transparent;
+  color: #6b7684;
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.maint-mode-tab.active {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+/* 모달 내 예약→완료 원클릭 전환 배너 */
+.reservation-convert-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #e8f3ff 0%, #f5f9ff 100%);
+  border: 1px solid rgba(49, 130, 246, 0.24);
+}
+
+.reservation-convert-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.reservation-convert-info strong {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #1b64da;
+}
+
+.reservation-convert-info span {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* 정비 탭 상단 예약된 정비 일정 섹션 */
+.reserved-maint-section {
+  margin-bottom: 22px;
+}
+
+.reserved-section-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reserved-maint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reserved-maint-card {
+  background-color: var(--color-surface);
+  border: 1px solid rgba(49, 130, 246, 0.22);
+  border-radius: 20px;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.reserved-maint-card--urgent {
+  background: linear-gradient(135deg, #fffbeb 0%, #ffffff 100%);
+  border-color: var(--color-urgent-border);
+}
+
+.reserved-maint-card--overdue {
+  background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%);
+  border-color: var(--color-danger-border);
+}
+
+.reserved-maint-card-body-btn {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 16px 18px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reserved-maint-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.reserved-date-pill {
+  font-size: 0.84rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #1b64da;
+  background-color: var(--color-primary-bg);
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
+.reserved-maint-card--urgent .reserved-date-pill {
+  color: #b45309;
+  background-color: #fef3c7;
+}
+
+.reserved-maint-card--overdue .reserved-date-pill {
+  color: var(--color-danger);
+  background-color: var(--color-danger-bg);
+}
+
+.reserved-maint-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 18px 14px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
 .maint-total-amount {
   font-size: 1.45rem;
   font-weight: 800;
