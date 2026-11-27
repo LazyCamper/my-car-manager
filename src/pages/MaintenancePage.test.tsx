@@ -710,4 +710,89 @@ describe('정비 내역 화면 (MaintenancePage) 통합 테스트', () => {
       screen.queryByTestId('reserved-maintenance-section'),
     ).not.toBeInTheDocument();
   });
+
+  it('예약 카드의 [📅 내 폰 캘린더에 일정 추가] 버튼 클릭 시 알람이 포함된 .ics 파일이 실행된다', async () => {
+    let capturedBlob: Blob | null = null;
+    let capturedDownloadName = '';
+    const origCreateObjectURL = URL.createObjectURL;
+    const origRevokeObjectURL = URL.revokeObjectURL;
+
+    URL.createObjectURL = vi.fn((obj: Blob | MediaSource) => {
+      if (obj instanceof Blob) {
+        capturedBlob = obj;
+      }
+      return 'blob:calendar-ics';
+    });
+    URL.revokeObjectURL = vi.fn();
+
+    const origCreateElement = document.createElement.bind(document);
+    const createElementSpy = vi
+      .spyOn(document, 'createElement')
+      .mockImplementation((tagName: string) => {
+        const el = origCreateElement(tagName);
+        if (tagName.toLowerCase() === 'a') {
+          vi.spyOn(el as HTMLAnchorElement, 'click').mockImplementation(() => {
+            capturedDownloadName = (el as HTMLAnchorElement).download;
+          });
+        }
+        return el;
+      });
+
+    try {
+      const repos = createMaintenanceTestRepositories({
+        vehicles: [DEFAULT_VEHICLE],
+        logs: [
+          {
+            id: 'maint-res-ics',
+            vehicleId: 'v-1',
+            status: 'reserved',
+            reservationTime: '10:30',
+            date: '2026.12.15',
+            category: 'engine_oil',
+            title: '엔진오일 정기 교환',
+            cost: 120000,
+            shopName: '구미서비스센터',
+            attachmentIds: [],
+            createdAt: '2026-11-27T09:00:00.000Z',
+          },
+        ],
+      });
+
+      render(
+        <RepositoryProvider repositories={repos}>
+          <ActiveVehicleProvider>
+            <MemoryRouter initialEntries={['/maintenance']}>
+              <AppRoutes />
+            </MemoryRouter>
+          </ActiveVehicleProvider>
+        </RepositoryProvider>,
+      );
+
+      const calendarBtn = await screen.findByRole('button', {
+        name: '📅 내 폰 캘린더에 일정 추가',
+      });
+      fireEvent.click(calendarBtn);
+
+      expect(capturedDownloadName).toBe('car-maintenance-2026-12-15.ics');
+      expect(capturedBlob).not.toBeNull();
+      expect(capturedBlob!.type).toBe('text/calendar;charset=utf-8');
+
+      const icsText = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(capturedBlob!);
+      });
+
+      expect(icsText).toContain('BEGIN:VCALENDAR');
+      expect(icsText).toContain('SUMMARY:[차량 정비] 쏘렌토 - 엔진오일 정기 교환');
+      expect(icsText).toContain('LOCATION:구미서비스센터');
+      expect(icsText).toContain('DTSTART:20261215T103000');
+      expect(icsText).toContain('BEGIN:VALARM');
+    } finally {
+      createElementSpy.mockRestore();
+      URL.createObjectURL = origCreateObjectURL;
+      URL.revokeObjectURL = origRevokeObjectURL;
+    }
+  });
 });

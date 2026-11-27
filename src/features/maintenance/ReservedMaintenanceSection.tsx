@@ -12,6 +12,7 @@ export interface ReservedMaintenanceSectionProps {
   reservedLogs: MaintenanceLog[];
   onSelectLog: (log: MaintenanceLog) => void;
   onQuickComplete: (log: MaintenanceLog) => void;
+  onAddToCalendar: (log: MaintenanceLog) => void;
   onOpenAddReservation: () => void;
 }
 
@@ -21,6 +22,7 @@ export const ReservedMaintenanceSection: React.FC<
   reservedLogs,
   onSelectLog,
   onQuickComplete,
+  onAddToCalendar,
   onOpenAddReservation,
 }) => {
   if (reservedLogs.length === 0) {
@@ -113,21 +115,30 @@ export const ReservedMaintenanceSection: React.FC<
                 <AttachmentThumbnailStrip attachmentIds={log.attachmentIds} />
               )}
 
-              <div className="reserved-maint-actions">
+              <div className="reserved-maint-footer">
                 <button
                   type="button"
-                  className="btn btn-chip"
-                  onClick={() => onSelectLog(log)}
+                  className="btn btn-calendar-ics touch-target"
+                  onClick={() => onAddToCalendar(log)}
                 >
-                  상세·수정
+                  📅 내 폰 캘린더에 일정 추가
                 </button>
-                <button
-                  type="button"
-                  className="btn btn-chip-primary"
-                  onClick={() => onQuickComplete(log)}
-                >
-                  ✓ 완료 전환
-                </button>
+                <div className="reserved-maint-actions">
+                  <button
+                    type="button"
+                    className="btn btn-chip"
+                    onClick={() => onSelectLog(log)}
+                  >
+                    상세·수정
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-chip-primary"
+                    onClick={() => onQuickComplete(log)}
+                  >
+                    ✓ 완료 전환
+                  </button>
+                </div>
               </div>
             </article>
           );

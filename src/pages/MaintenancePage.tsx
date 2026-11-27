@@ -4,6 +4,8 @@ import { useActiveVehicle } from '../app/ActiveVehicleContext';
 import { useRepositories } from '../app/RepositoryContext';
 import { MaintenanceLog, MaintenanceStatus } from '../domain/models';
 import {
+  buildReservationIcsContent,
+  buildReservationIcsFileName,
   calculateTotalMaintenanceCost,
   CategoryFilterValue,
   isReservedMaintenance,
@@ -11,6 +13,7 @@ import {
   MaintenanceFormSubmitData,
   MaintenanceTimeline,
   ReservedMaintenanceSection,
+  triggerCalendarIcsDownload,
 } from '../features/maintenance';
 import { formatCurrency } from '../shared/utils';
 
@@ -118,6 +121,15 @@ export const MaintenancePage: React.FC = () => {
     });
   };
 
+  const handleAddToCalendar = (log: MaintenanceLog) => {
+    const icsContent = buildReservationIcsContent({
+      log,
+      vehicle: activeVehicle ?? undefined,
+    });
+    const fileName = buildReservationIcsFileName(log);
+    triggerCalendarIcsDownload(icsContent, fileName);
+  };
+
   const handleDeleteLog = async (id: string) => {
     await maintenanceRepo.delete(id);
     if (activeVehicle) {
@@ -215,6 +227,7 @@ export const MaintenancePage: React.FC = () => {
             reservedLogs={reservedLogs}
             onSelectLog={handleSelectLog}
             onQuickComplete={(log) => void handleQuickCompleteLog(log)}
+            onAddToCalendar={handleAddToCalendar}
             onOpenAddReservation={() => handleOpenAddModal('reserved')}
           />
 
